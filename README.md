@@ -80,6 +80,7 @@ python main.py
 
 ## Future Work
 
+- Clean up code (docstrings, type hints, comments) 
 - Simulated client submitting real commands
 - Network partition simulation
 - Leader failover handling

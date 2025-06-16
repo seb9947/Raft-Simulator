@@ -106,6 +106,7 @@ Else, you can also run individual nodes using `main.py`.
 - Implement persistent log and node state.
 - Add advanced Raft features like pre-vote and log consistency checks.
 
+
 ---
 
 ## Resources

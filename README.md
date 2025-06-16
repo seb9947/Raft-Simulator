@@ -10,15 +10,19 @@ The simulation runs in a single process with virtual nodes communicating via an 
 ```
 Raft-Simulator/
 │
-├── main.py # Entry point: starts the simulation
+├── main.py                # Entry point: starts the simulation
 │
 ├── simulation/
 │ ├── simulation_runner.py # Manages simulation ticks, starts nodes
-│ └── message_bus.py # In-memory message passing between nodes
+│ └── message_bus.py       # In-memory message passing between nodes
 │
-├── raft/
-│ ├── raft_node.py # Core Raft node logic (leader election, log replication)
-│ └── message.py # Message types and structure
+├── nodes/
+│ ├── raft_node.py         # Core Raft node logic (leader election, log replication)
+│ └── raft_server.py       # Asyncio TCP server/client communication utilities
+│
+├── main.py                # Launches a single Raft Node 
+└── launch_all_nodes.py    # Coordinates running of multiple nodes
+
 ```
 
 ---
@@ -29,10 +33,10 @@ Raft-Simulator/
 
 ### Simulation Flow
 
-1. `main.py` kicks off a simulation using `SimulationRunner`.
-2. `SimulationRunner` creates N Raft nodes and starts ticking the system (1 tick/sec).
-3. Each node acts independently, using timers and random delays to simulate election timeouts and heartbeats.
-4. Nodes communicate using the in-memory `MessageBus`, sending messages like `REQUEST_VOTE`, `APPEND_ENTRIES`, etc.
+1. `main.py` starts one or more Raft nodes, each listening on a unique TCP port.
+2. Each node runs asynchronously, managing timers for election timeouts and heartbeats.
+3. Nodes communicate via TCP connections using JSON-encoded messages terminated by newlines.
+4. Messages use a custom Message class with explicit JSON serialization/deserialization that converts enum types to strings for compatibility.
 5. Once a leader is elected:
    - It periodically sends `AppendEntries` messages (including heartbeats) to followers.
    - It can accept new commands (e.g. `"SET x = 1"`, currently randomly generated in the leader - this could be expanded in the future to accept client input, see [Future Work](#future-work)) and appends them to its local log.
@@ -62,6 +66,18 @@ Raft-Simulator/
 
 ---
 
+## Networking and Message Handling
+
+Nodes listen on TCP sockets and accept connections from peers.
+
+Messages are JSON-encoded and newline-delimited.
+
+Custom serialization converts enum fields in messages to strings for JSON compatibility.
+
+The raft_server.py module implements an asyncio Protocol for incoming connections and a send_to_peer coroutine for outbound messages.
+
+---
+
 ## Simulated Behavior
 
 - **Election timeouts** are randomized to avoid split votes.
@@ -73,19 +89,22 @@ Raft-Simulator/
 
 ## Running the Simulation
 
+To launch with a set number of nodes simultaneously, use:
 ```bash
-python main.py
+python launch_all_nodes.py
 ```
+
+Else, you can also run individual nodes using `main.py`. 
+
 ---
 
 ## Future Work
 
-- Simulated client submitting real commands
-- Network partition simulation
-- Leader failover handling
-- Persistent log and state (e.g., JSON, SQLite)
-- Pre-vote logic or log consistency checks (`prevLogIndex`, `prevLogTerm`)
-- Message loss or latency simulation
+- Clean up code, add type hints, refactor messy classes.
+- Accept real client commands interactively.
+- Simulate network partitions, delays, and message loss.
+- Implement persistent log and node state.
+- Add advanced Raft features like pre-vote and log consistency checks.
 
 ---
 

@@ -2,11 +2,13 @@ import asyncio
 import random
 import time
 from enum import Enum, auto
-from .raft_server import RaftServerProtocol
-from .raft_server import send_to_peer
+from typing import Any, Dict, List, Optional, Tuple
+
+from .raft_server import RaftServerProtocol, send_to_peer
 
 
 class MessageType(Enum):
+    """Enumeration of Raft message types."""
     REQUEST_VOTE = auto()
     VOTE_RESPONSE = auto()
     APPEND_ENTRIES = auto()
@@ -14,16 +16,29 @@ class MessageType(Enum):
 
 
 class Message:
-    def __init__(self, type_, src, dst, term, data=None):
-        self.type = type_
-        self.src = src
-        self.dst = dst
-        self.term = term
-        self.data = data or {}
+    """
+    Represents a Raft protocol message.
+    """
+    def __init__(
+        self,
+        type_: MessageType,
+        src: str,
+        dst: str,
+        term: int,
+        data: Optional[Dict[str, Any]] = None
+    ) -> None:
+        self.type: MessageType = type_
+        self.src: str = src
+        self.dst: str = dst
+        self.term: int = term
+        self.data: Dict[str, Any] = data or {}
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the message to a dictionary for serialization.
+        """
         return {
-            "type": self.type.name,  # Convert enum to string
+            "type": self.type.name,
             "src": self.src,
             "dst": self.dst,
             "term": self.term,
@@ -31,7 +46,10 @@ class Message:
         }
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d: Dict[str, Any]) -> "Message":
+        """
+        Create a Message instance from a dictionary.
+        """
         return cls(
             type_=MessageType[d["type"]],
             src=d["src"],
@@ -42,51 +60,72 @@ class Message:
 
 
 class NodeState(Enum):
+    """Enumeration of Raft node states."""
     FOLLOWER = auto()
     CANDIDATE = auto()
     LEADER = auto()
 
 
 class LogEntry:
-    def __init__(self, term, command):
-        self.term = term
-        self.command = command
+    """
+    Represents a single log entry in the Raft log.
+    """
+    def __init__(self, term: int, command: str) -> None:
+        self.term: int = term
+        self.command: str = command
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"LogEntry(term={self.term}, command={self.command})"
 
 
 class RaftNode:
-    def __init__(self, node_id, peers, host, port):
-        self.node_id = node_id
-        self.peers = peers  # List of (peer_id, host, port)
-        self.host = host
-        self.port = port
+    """
+    Represents a Raft node, handling state, log, and protocol logic.
+    """
+    def __init__(
+        self,
+        node_id: str,
+        peers: List[Tuple[str, str, int]],
+        host: str,
+        port: int
+    ) -> None:
+        self.node_id: str = node_id
+        self.peers: List[Tuple[str, str, int]] = peers  # List of (peer_id, host, port)
+        self.host: str = host
+        self.port: int = port
 
-        self.log = []  # List[LogEntry]
-        self.commit_index = -1
-        self.last_applied = -1
-        self.next_index = {}     # For each peer: next log index to send
-        self.match_index = {}    # For each peer: highest index known to be replicated
+        self.log: List[LogEntry] = []
+        self.commit_index: int = -1
+        self.last_applied: int = -1
+        self.next_index: Dict[str, int] = {}
+        self.match_index: Dict[str, int] = {}
 
-        self.state = NodeState.FOLLOWER
-        self.current_term = 0
-        self.voted_for = None
-        self.votes_received = 0
+        self.state: NodeState = NodeState.FOLLOWER
+        self.current_term: int = 0
+        self.voted_for: Optional[str] = None
+        self.votes_received: int = 0
 
         self.reset_election_timeout()
-        self.heartbeat_interval = 1.0  # Leader heartbeat every second
-        self.last_heartbeat = time.time()
-        self.running = True
+        self.heartbeat_interval: float = 1.0
+        self.last_heartbeat: float = time.time()
+        self.running: bool = True
 
-    def majority(self):
+    def majority(self) -> int:
+        """
+        Calculate the majority count for the current cluster.
+        """
         return (len(self.peers) + 1) // 2 + 1
-    
-    def reset_election_timeout(self):
-        self.election_timeout = random.uniform(4.0, 6.0)
 
-    async def start(self):
-        # Start TCP server so this node can receive messages
+    def reset_election_timeout(self) -> None:
+        """
+        Reset the election timeout to a new random value.
+        """
+        self.election_timeout: float = random.uniform(4.0, 6.0)
+
+    async def start(self) -> None:
+        """
+        Start the Raft node's server and main event loop.
+        """
         loop = asyncio.get_running_loop()
         self.server = await loop.create_server(
             lambda: RaftServerProtocol(self),
@@ -95,10 +134,8 @@ class RaftNode:
         )
         print(f"Node {self.node_id} listening on {self.host}:{self.port}")
 
-        # Wait briefly to let all other nodes start their servers
-        await asyncio.sleep(1.0)
-        
-        # Main loop
+        await asyncio.sleep(1.0)  # Allow other nodes to start
+
         while self.running:
             now = time.time()
 
@@ -109,20 +146,26 @@ class RaftNode:
                 await self.send_heartbeats()
 
             if self.state == NodeState.LEADER and random.random() < 0.01:
-                await self.append_client_command(f"SET x = {random.randint(1,100)}")
+                await self.append_client_command(f"SET x = {random.randint(1, 100)}")
 
             if self.commit_index > self.last_applied:
                 self.apply_committed_entries()
 
             await asyncio.sleep(0.1)
-    
-    def apply_committed_entries(self):
+
+    def apply_committed_entries(self) -> None:
+        """
+        Apply all committed log entries to the state machine.
+        """
         while self.last_applied < self.commit_index:
             self.last_applied += 1
             entry = self.log[self.last_applied]
             print(f"Node {self.node_id} applied: {entry.command}")
 
-    async def start_election(self):
+    async def start_election(self) -> None:
+        """
+        Start a new election for leadership.
+        """
         self.state = NodeState.CANDIDATE
         self.current_term += 1
         self.voted_for = self.node_id
@@ -139,7 +182,10 @@ class RaftNode:
             )
             await send_to_peer(host, port, msg.to_dict())
 
-    async def handle_message(self, message_dict):
+    async def handle_message(self, message_dict: Dict[str, Any]) -> None:
+        """
+        Handle an incoming Raft protocol message.
+        """
         message = Message.from_dict(message_dict)
 
         if message.term > self.current_term:
@@ -207,7 +253,10 @@ class RaftNode:
                     self.commit_index = ack_index
                     print(f"Leader {self.node_id} committed index {ack_index}: {self.log[ack_index]}")
 
-    async def append_client_command(self, command):
+    async def append_client_command(self, command: str) -> None:
+        """
+        Append a client command to the log (leader only).
+        """
         if self.state != NodeState.LEADER:
             print(f"Node {self.node_id} rejected client command — not leader.")
             return
@@ -229,7 +278,10 @@ class RaftNode:
             )
             await send_to_peer(host, port, msg.to_dict())
 
-    async def become_leader(self):
+    async def become_leader(self) -> None:
+        """
+        Transition this node to the leader state.
+        """
         self.state = NodeState.LEADER
         print(f"Node {self.node_id} became leader for term {self.current_term}")
         last_log_index = len(self.log) - 1
@@ -238,7 +290,10 @@ class RaftNode:
             self.match_index[peer_id] = -1
         await self.send_heartbeats()
 
-    async def send_heartbeats(self):
+    async def send_heartbeats(self) -> None:
+        """
+        Send heartbeat (empty AppendEntries) messages to all peers.
+        """
         for peer_id, host, port in self.peers:
             if random.random() < 0.02:
                 await asyncio.sleep(5)
@@ -254,7 +309,19 @@ class RaftNode:
             await send_to_peer(host, port, msg.to_dict())
         self.last_heartbeat = time.time()
 
-    def _get_peer(self, peer_id):
+    def _get_peer(self, peer_id: str) -> Tuple[str, str, int]:
+        """
+        Retrieve peer information by peer ID.
+
+        Args:
+            peer_id: The ID of the peer.
+
+        Returns:
+            Tuple containing (peer_id, host, port).
+
+        Raises:
+            ValueError: If the peer is not found.
+        """
         for peer in self.peers:
             if peer[0] == peer_id:
                 return peer

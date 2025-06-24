@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 from typing import List, Tuple
+from io import TextIOWrapper
 
 NODES: List[Tuple[str, int]] = [
     ("A", 9001),
@@ -35,7 +36,7 @@ def main() -> None:
     Launch all Raft nodes as subprocesses, each with its own log file.
     """
     os.makedirs(LOG_DIR, exist_ok=True)
-    processes: List[Tuple[subprocess.Popen, 'os._IOBase']] = []
+    processes: List[Tuple[subprocess.Popen, TextIOWrapper]] = []
 
     for node_id, port in NODES:
         peer_args = build_peer_list(node_id, NODES)

@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .raft_node import RaftNode
+    from nodes.raft_node import RaftNode
 
 class RaftServerProtocol(asyncio.Protocol):
     """
@@ -27,6 +27,7 @@ class RaftServerProtocol(asyncio.Protocol):
         Args:
             transport: The transport representing the connection.
         """
+        assert isinstance(transport, asyncio.Transport)
         self.transport = transport
 
     def data_received(self, data: bytes) -> None:

@@ -4,7 +4,7 @@ import time
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple
 
-from .raft_server import RaftServerProtocol, send_to_peer
+from nodes.raft_server import RaftServerProtocol, send_to_peer
 
 
 class MessageType(Enum):

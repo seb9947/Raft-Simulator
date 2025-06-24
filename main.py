@@ -33,7 +33,7 @@ async def main() -> None:
             await asyncio.sleep(1)
     except KeyboardInterrupt:
         print(f"Shutting down node {node_id}")
-        await node.stop()  # If you have implemented graceful shutdown
+        # await node.stop()  # TODO: implement graceful shutdown
 
 if __name__ == "__main__":
     asyncio.run(main())

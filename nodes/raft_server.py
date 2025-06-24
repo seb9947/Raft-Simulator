@@ -1,14 +1,16 @@
 import asyncio
 import json
-from typing import Any, Dict
-from .raft_node import RaftNode
+from typing import Any, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .raft_node import RaftNode
 
 class RaftServerProtocol(asyncio.Protocol):
     """
     Asyncio Protocol implementation for a Raft server node.
     Handles incoming connections and message parsing.
     """
-    def __init__(self, node: RaftNode) -> None:
+    def __init__(self, node: 'RaftNode') -> None:
         """
         Initialize the protocol with a reference to the node.
 

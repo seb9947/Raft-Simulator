@@ -128,61 +128,70 @@ class RaftNode:
                 print(f"Node {self.node_id} demoted from leader")
 
         if message.type == MessageType.REQUEST_VOTE:
-            if self.voted_for is None or self.voted_for == message.data['candidate_id']:
-                self.voted_for = message.data['candidate_id']
-                peer_id, peer_host, peer_port = self._get_peer(message.src)
-                response = Message(
-                    MessageType.VOTE_RESPONSE, self.node_id, message.src, self.current_term,
-                    data={'vote_granted': True}
-                )
-                await send_to_peer(peer_host, peer_port, response.to_dict())
-
+            await self._handle_request_vote(message)
         elif message.type == MessageType.VOTE_RESPONSE:
-            if self.state == NodeState.CANDIDATE and message.term == self.current_term:
-                if message.data.get('vote_granted'):
-                    self.votes_received += 1
-                    if self.votes_received >= self.majority():
-                        await self.become_leader()
-
+            await self._handle_vote_response(message)
         elif message.type == MessageType.APPEND_ENTRIES:
-            if self.state != NodeState.LEADER:
-                self.last_heartbeat = time.time()
+            await self._handle_append_entries(message)
+        elif message.type == MessageType.APPEND_RESPONSE:
+            await self._handle_append_response(message)
 
-            entries = message.data.get('entries', [])
-            if entries:
-                for entry_dict in entries:
-                    entry = LogEntry(**entry_dict)
-                    self.log.append(entry)
-                print(f"Node {self.node_id} appended entries: {entries}")
-
-            leader_commit = message.data.get('leader_commit', -1)
-            if leader_commit > self.commit_index:
-                self.commit_index = min(leader_commit, len(self.log) - 1)
-
-            self.apply_committed_entries()
-
-            ack_index = len(self.log) - 1
+    async def _handle_request_vote(self, message: Message) -> None:
+        if self.voted_for is None or self.voted_for == message.data['candidate_id']:
+            self.voted_for = message.data['candidate_id']
             peer_id, peer_host, peer_port = self._get_peer(message.src)
             response = Message(
-                MessageType.APPEND_RESPONSE, self.node_id, message.src, self.current_term,
-                data={'ack_index': ack_index}
+                MessageType.VOTE_RESPONSE, self.node_id, message.src, self.current_term,
+                data={'vote_granted': True}
             )
             await send_to_peer(peer_host, peer_port, response.to_dict())
 
-        elif message.type == MessageType.APPEND_RESPONSE:
-            if self.state == NodeState.LEADER:
-                follower = message.src
-                ack_index = message.data.get('ack_index', -1)
-                self.match_index[follower] = ack_index
-                self.next_index[follower] = ack_index + 1
+    async def _handle_vote_response(self, message: Message) -> None:
+        if self.state == NodeState.CANDIDATE and message.term == self.current_term:
+            if message.data.get('vote_granted'):
+                self.votes_received += 1
+                if self.votes_received >= self.majority():
+                    await self.become_leader()
 
-                replicated_count = sum(
-                    1 for idx in self.match_index.values() if idx >= ack_index
-                ) + 1
+    async def _handle_append_entries(self, message: Message) -> None:
+        if self.state != NodeState.LEADER:
+            self.last_heartbeat = time.time()
 
-                if replicated_count >= self.majority() and ack_index > self.commit_index:
-                    self.commit_index = ack_index
-                    print(f"Leader {self.node_id} committed index {ack_index}: {self.log[ack_index]}")
+        entries = message.data.get('entries', [])
+        if entries:
+            for entry_dict in entries:
+                entry = LogEntry(**entry_dict)
+                self.log.append(entry)
+            print(f"Node {self.node_id} appended entries: {entries}")
+
+        leader_commit = message.data.get('leader_commit', -1)
+        if leader_commit > self.commit_index:
+            self.commit_index = min(leader_commit, len(self.log) - 1)
+
+        self.apply_committed_entries()
+
+        ack_index = len(self.log) - 1
+        peer_id, peer_host, peer_port = self._get_peer(message.src)
+        response = Message(
+            MessageType.APPEND_RESPONSE, self.node_id, message.src, self.current_term,
+            data={'ack_index': ack_index}
+        )
+        await send_to_peer(peer_host, peer_port, response.to_dict())
+
+    async def _handle_append_response(self, message: Message) -> None:
+        if self.state == NodeState.LEADER:
+            follower = message.src
+            ack_index = message.data.get('ack_index', -1)
+            self.match_index[follower] = ack_index
+            self.next_index[follower] = ack_index + 1
+
+            replicated_count = sum(
+                1 for idx in self.match_index.values() if idx >= ack_index
+            ) + 1
+
+            if replicated_count >= self.majority() and ack_index > self.commit_index:
+                self.commit_index = ack_index
+                print(f"Leader {self.node_id} committed index {ack_index}: {self.log[ack_index]}")
 
     async def append_client_command(self, command: str) -> None:
         """

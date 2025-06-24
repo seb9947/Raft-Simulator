@@ -2,7 +2,7 @@
 
 This project is a simulation of the [Raft consensus algorithm](https://raft.github.io/), implemented entirely in Python, for educational purposes. It demonstrates how Raft achieves **distributed consensus** through leader election, log replication, and commitment of commands to a replicated state machine.
 
-The simulation runs in a single process with virtual nodes communicating via an in-memory message bus, but maintains the logic and structure of a real distributed system.
+The simulation runs in a single process with virtual nodes communicating via TCP using asyncio, but maintains the logic and structure of a real distributed system.
 
 ---
 

@@ -1,81 +1,12 @@
 import asyncio
 import random
 import time
-from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple
 
 from nodes.raft_server import RaftServerProtocol, send_to_peer
-
-
-class MessageType(Enum):
-    """Enumeration of Raft message types."""
-    REQUEST_VOTE = auto()
-    VOTE_RESPONSE = auto()
-    APPEND_ENTRIES = auto()
-    APPEND_RESPONSE = auto()
-
-
-class Message:
-    """
-    Represents a Raft protocol message.
-    """
-    def __init__(
-        self,
-        type_: MessageType,
-        src: str,
-        dst: str,
-        term: int,
-        data: Optional[Dict[str, Any]] = None
-    ) -> None:
-        self.type: MessageType = type_
-        self.src: str = src
-        self.dst: str = dst
-        self.term: int = term
-        self.data: Dict[str, Any] = data or {}
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert the message to a dictionary for serialization.
-        """
-        return {
-            "type": self.type.name,
-            "src": self.src,
-            "dst": self.dst,
-            "term": self.term,
-            "data": self.data,
-        }
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "Message":
-        """
-        Create a Message instance from a dictionary.
-        """
-        return cls(
-            type_=MessageType[d["type"]],
-            src=d["src"],
-            dst=d["dst"],
-            term=d["term"],
-            data=d.get("data", {}),
-        )
-
-
-class NodeState(Enum):
-    """Enumeration of Raft node states."""
-    FOLLOWER = auto()
-    CANDIDATE = auto()
-    LEADER = auto()
-
-
-class LogEntry:
-    """
-    Represents a single log entry in the Raft log.
-    """
-    def __init__(self, term: int, command: str) -> None:
-        self.term: int = term
-        self.command: str = command
-
-    def __repr__(self) -> str:
-        return f"LogEntry(term={self.term}, command={self.command})"
+from nodes.raft_message import Message, MessageType
+from nodes.raft_log import LogEntry
+from nodes.raft_state import NodeState
 
 
 class RaftNode:
@@ -326,3 +257,15 @@ class RaftNode:
             if peer[0] == peer_id:
                 return peer
         raise ValueError(f"Peer {peer_id} not found")
+
+    async def stop(self) -> None:
+        """
+        Gracefully stop the Raft node, logging the stop time.
+        """
+        self.running = False
+        stop_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        print(f"Node {self.node_id} stopped at {stop_time}")
+        # Close the server if it exists
+        if hasattr(self, 'server'):
+            self.server.close()
+            await self.server.wait_closed()
